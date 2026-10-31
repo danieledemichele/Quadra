@@ -1,0 +1,31 @@
+{
+  "name": "quadra",
+  "productName": "Quadra",
+  "version": "1.0.0",
+  "description": "Legge gli scontrini con un modello di visione e li inserisce nel database Uscite di Notion, dopo la tua revisione.",
+  "main": "main.js",
+  "author": "Daniele De Michele <daniele@danieledemichele.it>",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:nosandbox": "electron . --no-sandbox",
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --linux deb AppImage"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "it.danieledemichele.quadra",
+    "productName": "Quadra",
+    "files": ["main.js", "preload.js", "imgworker-preload.js", "imgworker.html", "imgworker-renderer.js", "src/**/*", "build/icon.png", "package.json"],
+    "linux": {
+      "target": ["deb", "AppImage"],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "Daniele De Michele <daniele@danieledemichele.it>"
+    }
+  }
+}
