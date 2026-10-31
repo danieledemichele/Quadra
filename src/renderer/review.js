@@ -43,7 +43,7 @@ function renderList() {
     const d = i.data || {};
     const warn = i.status === 'pending' && hasWarn(i);
     return h('button', {
-      class: `row ${i.id === S.selected ? 'selected' : ''} ${i.status}`, type: 'button', dataset: { id: i.id },
+      class: `row ${i.id === S.selected ? 'selected' : ''} ${i.status}`, type: 'button', dataset: { id: i.id }, title: i.error || null,
       'aria-current': i.id === S.selected ? 'true' : null,
       onclick: () => selectItem(i.id),
     },

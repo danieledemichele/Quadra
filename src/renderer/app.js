@@ -84,7 +84,7 @@ function summaryToast(s) {
   if (s.duplicates) parts.push(`${s.duplicates} doppi scartati`);
   if (s.errors) parts.push(`${s.errors} con errore`);
   toast(parts.join(' · '), s.errors ? 'warn' : 'ok');
-  if (s.stopped === 'models') toast(`Mi sono fermato: i modelli non rispondono (limite o errore). Restano ${s.remaining} foto da leggere: riprova più tardi.`, 'error');
+  if (s.stopped === 'models') toast(`Scansione interrotta: ${(s.lastError || 'i modelli non rispondono').slice(0, 260)}. Restano ${s.remaining} foto da leggere.`, 'error');
   if (s.missingFolders?.length) toast(`Cartella non trovata su Dropbox: ${s.missingFolders.join(', ')}`, 'warn');
   if (!s.found && !s.added && !s.errors) toast('Nessuna nuova foto trovata nelle cartelle.', 'ok');
 }
@@ -92,6 +92,20 @@ function summaryToast(s) {
 async function startScan() {
   if (!S.settings?.dropbox?.refreshToken) {
     toast('Collega prima Dropbox nelle Impostazioni.', 'warn');
+    setTab('settings');
+    return;
+  }
+  const needsKey = (S.settings.models || []).filter((m) => m.enabled).every((m) => {
+    const p = S.settings.providers.find((x) => x.id === m.providerId);
+    return !p || (!p.apiKey && !/localhost|127\.0\.0\.1/.test(p.baseUrl));
+  });
+  if (needsKey) {
+    toast('Manca la chiave API del modello (es. Groq): inseriscila in Impostazioni → Modelli di lettura e salva.', 'warn');
+    setTab('settings');
+    return;
+  }
+  if (!S.settings.notion?.apiKey) {
+    toast('Manca la chiave di Notion: inseriscila in Impostazioni.', 'warn');
     setTab('settings');
     return;
   }
@@ -125,8 +139,12 @@ function renderStatusbar() {
 async function refreshItems() {
   const list = await api.items.list();
   S.items = new Map(list.map((i) => [i.id, i]));
+  if (!S.items.has(S.selected) || !REVIEW_STATES.includes(S.items.get(S.selected).status)) {
+    const q = reviewItems();
+    S.selected = (q.find((i) => i.status === 'pending') || q.find((i) => i.status === 'error'))?.id || null;
+  }
   updateChrome();
-  if (S.tab === 'review') { renderList(); if (!$('#form')) renderDetail(); }
+  if (S.tab === 'review') { renderList(); renderDetail(); }
   else if (S.tab === 'history') renderHistoryBody();
 }
 
@@ -136,7 +154,7 @@ function onItem(item) {
   updateChrome();
   if (S.tab === 'history') { renderHistoryBody(); return; }
   if (S.tab !== 'review') return;
-  if (!S.selected && item.status === 'pending') S.selected = item.id;
+  if (!S.selected && ['pending', 'error'].includes(item.status)) S.selected = item.id;
 
   if (item.id === S.selected && !REVIEW_STATES.includes(item.status)) {
     // lo scontrino selezionato è stato inviato o scartato: passo al prossimo

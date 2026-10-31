@@ -136,7 +136,7 @@ class Pipeline extends EventEmitter {
 
   async scanDropbox({ signal } = {}) {
     const cfg = this.config.get();
-    const summary = { found: 0, added: 0, duplicates: 0, errors: 0, stopped: null, remaining: 0, missingFolders: [] };
+    const summary = { found: 0, added: 0, duplicates: 0, errors: 0, stopped: null, remaining: 0, missingFolders: [], lastError: null };
     this.emit('progress', { phase: 'list' });
     const queue = [];
     for (const person of cfg.people) {
@@ -196,6 +196,7 @@ class Pipeline extends EventEmitter {
         }
         this._patch(item.id, { status: 'error', error: e.message });
         summary.errors++;
+        summary.lastError = e.message;
         if (e.kind === 'all-failed') failStreak++;
         if (failStreak >= 2 || /chiave API/i.test(e.message)) {
           summary.stopped = 'models';
@@ -211,7 +212,7 @@ class Pipeline extends EventEmitter {
   async importLocal(files, person, { signal } = {}) {
     const cfg = this.config.get();
     if (!cfg.people.some((p) => p.name === person)) throw new Error('Scegli per chi sono questi scontrini.');
-    const summary = { found: files.length, added: 0, duplicates: 0, errors: 0, stopped: null, remaining: 0 };
+    const summary = { found: files.length, added: 0, duplicates: 0, errors: 0, stopped: null, remaining: 0, lastError: null };
     let failStreak = 0;
     for (let i = 0; i < files.length; i++) {
       const fp = files[i];
@@ -240,6 +241,7 @@ class Pipeline extends EventEmitter {
         }
         this._patch(item.id, { status: 'error', error: e.message });
         summary.errors++;
+        summary.lastError = e.message;
         if (e.kind === 'all-failed') failStreak++;
         if (failStreak >= 2 || /chiave API/i.test(e.message)) {
           summary.stopped = 'models';
