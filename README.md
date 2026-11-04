@@ -53,7 +53,7 @@ Per l'AppImage su Ubuntu 22.04 serve `libfuse2` (`sudo apt install libfuse2`).
 
 1. Scatti le foto, finiscono in `/Daniele` o `/Ettore` su Dropbox (anche in sottocartelle per mese).
 2. **Scansiona Dropbox**: l'app scarica le foto nuove, le legge e le mette in *Da rivedere*. Su Dropbox non cambia nulla finché non confermi.
-3. Per ogni scontrino controlli negozio, data, importo, scegli il **Conto** e premi **Invia a Notion** (`Ctrl+Invio`). La foto va in `Elaborati`.
+3. Per ogni scontrino controlli negozio, data, importo, scegli il **Conto** e premi **Invia a Notion** (`Ctrl+Invio`). La foto viene anche **allegata alla riga di Notion** (colonna *Allegati*, si può disattivare in Impostazioni → Avanzate) e il file originale va in `Elaborati` su Dropbox.
 4. **Scarta** (`Canc`) sposta la foto in `Scartati`. **Rileggi** rifà la lettura col modello.
 5. *Invia i N pronti* manda in blocco quelli senza avvisi (con lo stesso Conto, se vuoi).
 

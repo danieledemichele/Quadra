@@ -46,13 +46,19 @@ async function startMock(state) {
         Descrizione: { type: 'title' }, Data: { type: 'date' }, Importo: { type: 'number' },
         Tags: { type: 'multi_select' }, Conti: { type: 'relation', relation: { data_source_id: 'ds-conti' } },
         'Budget Mensile': { type: 'relation', relation: { data_source_id: 'ds-budget' } },
-        Categoria: { type: 'formula' }, Tipo: { type: 'formula' },
+        Allegati: { type: 'files' }, Categoria: { type: 'formula' }, Tipo: { type: 'formula' },
       } });
     }
     if (url === '/v1/data_sources/ds-conti/query') return send(200, { results: [{ id: 'conto-1', properties: { Nome: { type: 'title', title: [{ plain_text: 'Postepay' }] } } }], has_more: false });
     if (url === '/v1/data_sources/ds-budget/query') {
       const m = body.filter.rich_text.equals;
       return send(200, { results: m === '2026-10' ? [{ id: 'budget-oct' }] : [] });
+    }
+    if (url === '/v1/file_uploads' && req.method === 'POST') return send(200, { id: 'fu-1', upload_url: 'x', request: body });
+    if (url === '/v1/file_uploads/fu-1/send') {
+      if (state.failUpload) return send(400, { message: 'File troppo grande per il piano' });
+      state.uploads.push({ type: req.headers['content-type'], raw });
+      return send(200, { id: 'fu-1', status: 'uploaded' });
     }
     if (url === '/v1/pages' && req.method === 'POST') { state.pages.push(body); return send(200, { id: 'page-' + state.pages.length, url: 'https://notion.so/p' }); }
     if (url.startsWith('/v1/pages/')) return send(200, { properties: { Categoria: { formula: { string: 'Spesa alimentare' } }, Tipo: { formula: { string: 'Necessità' } } } });
@@ -75,7 +81,7 @@ async function startMock(state) {
 const ok = (obj) => ({ body: { choices: [{ message: { content: typeof obj === 'string' ? obj : JSON.stringify(obj) } }] } });
 
 async function setup(overrides = {}) {
-  const state = { files: [], moved: new Map(), pages: [], log: [], llm: [], llmCalls: [] };
+  const state = { files: [], moved: new Map(), pages: [], log: [], llm: [], llmCalls: [], uploads: [] };
   const mock = await startMock(state);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scontrini-'));
   const config = new ConfigStore(path.join(dir, 'settings.json'));

@@ -93,6 +93,9 @@ test('flusso completo: scan → revisione → conferma su Notion → file in Ela
     assert.deepEqual(page.properties.Conti, { relation: [{ id: 'conto-1' }] });
     assert.equal(page.properties.Descrizione.title[0].text.content, 'Eurospin');
     assert.equal(t.state.moved.get('id:1'), '/Daniele/Elaborati/sc1.jpg');
+    assert.deepEqual(page.properties.Allegati, { files: [{ type: 'file_upload', file_upload: { id: 'fu-1' }, name: `${octDate} Eurospin.jpg` }] });
+    assert.match(t.state.uploads[0].type, /^multipart\/form-data; boundary=/);
+    assert.ok(t.state.uploads[0].raw.includes('foto-uno') && t.state.uploads[0].raw.includes('.jpg'));
 
     // doppia conferma rifiutata
     await assert.rejects(() => t.pipeline.confirm(a.id), /già stato elaborato/);
@@ -187,5 +190,28 @@ test('scarta e annulla', async () => {
     t.state.files.push({ id: 'id:2', name: 'b.jpg', path: '/Daniele/b.jpg', data: Buffer.from('w') });
     ac.abort();
     await assert.rejects(() => t.pipeline.scanDropbox({ signal: ac.signal }), /annullata|abort/i);
+  } finally { await t.mock.close(); }
+});
+
+test('allegato: se il caricamento fallisce la riga si crea lo stesso, con avviso; si può disattivare', async () => {
+  const t = await setup();
+  try {
+    t.state.files.push({ id: 'id:1', name: 'a.jpg', path: '/Daniele/a.jpg', data: Buffer.from('uno') });
+    t.state.files.push({ id: 'id:2', name: 'b.jpg', path: '/Daniele/b.jpg', data: Buffer.from('due') });
+    t.state.llm.push(ok({ store: 'Lidl', date: octDate, total: 3 }));
+    t.state.llm.push(ok({ store: 'Conad', date: octDate, total: 4 }));
+    await t.pipeline.scanDropbox();
+    const [a, b] = t.pipeline.list().sort((x, y) => (x.fileName < y.fileName ? -1 : 1));
+    t.state.failUpload = true;
+    const done = await t.pipeline.confirm(a.id);
+    assert.equal(done.status, 'done');
+    assert.equal(t.state.pages[0].properties.Allegati, undefined);
+    assert.ok(done.warnings.some((w) => /Foto non allegata/.test(w.text)));
+
+    t.state.failUpload = false;
+    t.config.applyPublic({ ...t.config.getPublic(), attachPhotos: false });
+    await t.pipeline.confirm(b.id);
+    assert.equal(t.state.pages[1].properties.Allegati, undefined);
+    assert.equal(t.state.uploads.length, 0);
   } finally { await t.mock.close(); }
 });

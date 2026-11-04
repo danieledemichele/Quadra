@@ -192,6 +192,8 @@ function storesCard() {
 function advancedCard() {
   const d = S.draft;
   return section('Avanzate', null,
+    h('label', { class: 'check big' }, h('input', { type: 'checkbox', checked: d.attachPhotos !== false, onchange: (e) => { d.attachPhotos = e.target.checked; markDirty(); } }),
+      h('span', {}, 'Allega la foto dello scontrino alla riga di Notion ', h('span', { class: 'muted', text: '(colonna «Allegati»; la foto è quella ridotta, leggibile e leggera)' }))),
     h('div', { class: 'grid2' },
       field('Dimensione massima foto inviata al modello (megapixel)', textInput(d, 'maxMegapixels', { type: 'number', number: true, min: 0.5, max: 8, step: 0.5 }), 'Più basso = più veloce e meno token.'),
       field('Attesa massima per un limite di velocità (secondi)', textInput(d, 'maxWaitSeconds', { type: 'number', number: true, min: 10, max: 600, step: 10 }), 'Oltre questo tempo si passa al modello successivo.')),

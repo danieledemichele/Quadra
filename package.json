@@ -1,7 +1,7 @@
 {
   "name": "quadra",
   "productName": "Quadra",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Legge gli scontrini con un modello di visione e li inserisce nel database Uscite di Notion, dopo la tua revisione.",
   "main": "main.js",
   "author": "Daniele De Michele <daniele@danieledemichele.it>",

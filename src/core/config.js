@@ -38,6 +38,7 @@ function defaults() {
     ],
     knownStores: [...DEFAULT_STORES],
     aliases: {},
+    attachPhotos: true,
     maxMegapixels: 2,
     maxWaitSeconds: 120,
   };
@@ -118,6 +119,7 @@ function normalizeSettings(input) {
     models,
     knownStores,
     aliases,
+    attachPhotos: s.attachPhotos !== false,
     maxMegapixels: num(s.maxMegapixels, d.maxMegapixels, 0.5, 8),
     maxWaitSeconds: num(s.maxWaitSeconds, d.maxWaitSeconds, 10, 600),
   };

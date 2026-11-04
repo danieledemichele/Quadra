@@ -328,8 +328,16 @@ class Pipeline extends EventEmitter {
       if (!d.date) throw new Error('Manca una data valida.');
       if (!(d.amount > 0)) throw new Error('Manca l\'importo.');
 
+      let attachment = null;
+      if (this.config.get().attachPhotos) {
+        const jpeg = await this.imageFor(id);
+        if (jpeg) {
+          const safe = `${d.date} ${d.store}`.replace(/[\\/:*?"<>|]/g, '-');
+          attachment = { buffer: jpeg, filename: `${safe}.jpg`, contentType: 'image/jpeg' };
+        }
+      }
       const res = await this.notion.createExpense(
-        { store: d.store, date: d.date, amount: d.amount, person: item.person, contoId: item.contoId },
+        { store: d.store, date: d.date, amount: d.amount, person: item.person, contoId: item.contoId, attachment },
         signal,
       );
 

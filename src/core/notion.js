@@ -31,8 +31,12 @@ class Notion {
       try {
         res = await this.fetch(this.baseUrl + path, {
           method,
-          headers: { Authorization: `Bearer ${key}`, 'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined,
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Notion-Version': NOTION_VERSION,
+            ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+          },
+          body: !body ? undefined : body instanceof FormData ? body : JSON.stringify(body),
           signal: withTimeout(signal, 30000),
         });
       } catch (e) {
@@ -87,6 +91,7 @@ class Notion {
       tags: find(['Tags', 'Tag'], ['multi_select', 'select']),
       conti: find(['Conti', 'Conto'], ['relation']),
       budget: find(['Budget Mensile'], ['relation']),
+      files: find(['Allegati', 'Allegato'], ['files']),
       categoria: find(['Categoria']),
       tipo: find(['Tipo']),
     };
@@ -96,6 +101,7 @@ class Notion {
     if (!s.tags) s.missing.push('Tags');
     if (!s.conti) s.missing.push('Conti');
     if (!s.budget) s.missing.push('Budget Mensile');
+    if (!s.files) s.missing.push('Allegati');
     this._schema = s;
     return s;
   }
@@ -133,7 +139,17 @@ class Notion {
     return id;
   }
 
-  async createExpense({ store, date, amount, person, contoId }, signal) {
+  // Carica un file su Notion (API file_uploads) e restituisce l'id da usare nella proprietà "files".
+  async uploadFile(buffer, filename, contentType, signal) {
+    if (buffer.length > 20 * 1024 * 1024) throw new Error('file oltre 20 MB');
+    const fu = await this._req('POST', '/v1/file_uploads', { filename, content_type: contentType }, signal);
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: contentType }), filename);
+    await this._req('POST', `/v1/file_uploads/${fu.id}/send`, form, signal);
+    return fu.id;
+  }
+
+  async createExpense({ store, date, amount, person, contoId, attachment }, signal) {
     const s = await this.schema(signal);
     const warnings = [];
     const props = {};
@@ -146,6 +162,19 @@ class Notion {
         : { multi_select: [{ name: person }] };
     }
     if (s.conti && contoId) props[s.conti.name] = { relation: [{ id: contoId }] };
+
+    if (attachment) {
+      if (!s.files) warnings.push('Foto non allegata: nel database manca la colonna «Allegati» (tipo File e contenuti multimediali).');
+      else {
+        try {
+          const id = await this.uploadFile(attachment.buffer, attachment.filename, attachment.contentType, signal);
+          props[s.files.name] = { files: [{ type: 'file_upload', file_upload: { id }, name: attachment.filename }] };
+        } catch (e) {
+          if (signal?.aborted) throw e;
+          warnings.push(`Foto non allegata: ${e.message}`);
+        }
+      }
+    }
 
     const budgetId = await this.findBudget(date.slice(0, 7), signal);
     if (budgetId && s.budget) props[s.budget.name] = { relation: [{ id: budgetId }] };
