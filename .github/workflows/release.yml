@@ -1,8 +1,11 @@
 name: Rilascio
 
-# Quando crei un tag v* (es. v1.1.0) costruisce il pacchetto .deb e lo allega alla release.
+# Ad ogni push su main: se la versione in package.json non ha ancora una release,
+# costruisce il pacchetto .deb, crea il tag vX.Y.Z e pubblica la release con il .deb allegato.
+# (Un tag v* creato a mano funziona ancora come prima.)
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -14,18 +17,34 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - name: Versione e release già esistente?
+        id: v
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VER" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-node@v4
+        if: steps.v.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
         with:
           node-version: 22
           cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npm test
-      - run: npx electron-builder --linux deb --publish never
+      - if: steps.v.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
+        run: npm ci --no-audit --no-fund
+      - if: steps.v.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
+        run: npm test
+      - if: steps.v.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
+        run: npx electron-builder --linux deb --publish never
       - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.v.outputs.exists == 'false'
         with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
           files: dist/*.deb
       - uses: actions/upload-artifact@v4
+        if: steps.v.outputs.exists == 'false' || github.event_name == 'workflow_dispatch'
         with:
           name: quadra-deb
           path: dist/*.deb

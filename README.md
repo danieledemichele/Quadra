@@ -86,7 +86,7 @@ Quadra controlla su GitHub se c'è una release più recente (all'avvio e ogni 6 
 
 - Se il repository è **privato**, in Impostazioni → Aggiornamenti serve un token GitHub *fine-grained* con permesso **Contents: sola lettura** su `danieledemichele/quadra`.
 - Funziona nell'app installata dal pacchetto `.deb` (non con `npm start`).
-- Le release si pubblicano creando un tag `v*`: il flusso GitHub costruisce e allega il `.deb`.
+- Le release sono automatiche: quando la versione in `package.json` sale e il codice arriva su `main`, GitHub crea il tag `vX.Y.Z`, costruisce il `.deb` e lo allega alla release.
 
 ## Aggiungere altri modelli o provider
 
