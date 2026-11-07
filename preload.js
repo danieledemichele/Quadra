@@ -36,6 +36,14 @@ contextBridge.exposeInMainWorld('quadra', {
   },
   stats: { get: (o) => call('stats:get', o), refresh: (o) => call('stats:refresh', o) },
   update: { state: () => call('update:state'), check: () => call('update:check'), install: () => call('update:install') },
+  lock: {
+    status: () => call('lock:status'),
+    unlock: (pw) => call('lock:unlock', pw),
+    lock: () => call('lock:lock'),
+    set: (pw, current) => call('lock:set', pw, current),
+    remove: (pw) => call('lock:remove', pw),
+    autolock: (min) => call('lock:autolock', min),
+  },
   conti: { list: (refresh) => call('conti:list', refresh) },
   on: (event, cb) => {
     if (!EVENTS.has(event)) return () => {};

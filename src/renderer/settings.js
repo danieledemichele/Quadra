@@ -278,6 +278,62 @@ function appearanceCard() {
   return card;
 }
 
+// ---------- sicurezza: password di accesso ----------
+
+function pwField(label, auto) {
+  const input = h('input', { type: 'password', autocomplete: auto, spellcheck: 'false', maxlength: '256' });
+  return { input, row: h('label', { class: 'field' }, h('span', { text: label }), input) };
+}
+
+async function lockAction(btn, fn, okMsg) {
+  btn.disabled = true;
+  try { S.lock = await fn(); toast(okMsg, 'ok'); updateChrome(); renderSettings(); } catch (e) { toast(errMsg(e), 'error'); btn.disabled = false; }
+}
+
+function securityCard() {
+  const st = S.lock || { enabled: false };
+  const note = h('p', { class: 'sec-note', text: 'La password protegge l\'apertura di Quadra. Non viene mai salvata in chiaro e l\'app non conosce la tua password di sistema. Non sostituisce il blocco dello schermo del computer.' });
+  if (!st.enabled) {
+    const a = pwField('Nuova password (almeno 8 caratteri)', 'new-password');
+    const b = pwField('Ripeti la password', 'new-password');
+    const btn = h('button', { class: 'btn primary', type: 'button', onclick: () => {
+      if (a.input.value !== b.input.value) return toast('Le due password non coincidono.', 'error');
+      const pw = a.input.value;
+      a.input.value = ''; b.input.value = '';
+      lockAction(btn, () => api.lock.set(pw), 'Password attivata: verrà richiesta a ogni apertura.');
+    } }, 'Attiva la password');
+    const c = section('Sicurezza', 'Chiedi una password per aprire Quadra.', note, h('div', { class: 'sec-grid' }, a.row, b.row), h('div', {}, btn));
+    c.id = 'card-sicurezza';
+    return c;
+  }
+  const mins = [[0, 'Mai'], [1, '1 minuto'], [5, '5 minuti'], [15, '15 minuti'], [30, '30 minuti'], [60, '1 ora']];
+  const sel = h('select', { 'aria-label': 'Blocco automatico', onchange: (e) => lockAction(e.target, () => api.lock.autolock(parseInt(e.target.value, 10)), 'Blocco automatico aggiornato.') },
+    mins.map(([v, l]) => h('option', { value: String(v), selected: v === st.autoLockMin }, l)));
+  const cur = pwField('Password attuale', 'current-password');
+  const n1 = pwField('Nuova password (almeno 8 caratteri)', 'new-password');
+  const n2 = pwField('Ripeti la nuova password', 'new-password');
+  const change = h('button', { class: 'btn', type: 'button', onclick: () => {
+    if (n1.input.value !== n2.input.value) return toast('Le due password non coincidono.', 'error');
+    const [c0, p0] = [cur.input.value, n1.input.value];
+    cur.input.value = ''; n1.input.value = ''; n2.input.value = '';
+    lockAction(change, () => api.lock.set(p0, c0), 'Password cambiata.');
+  } }, 'Cambia password');
+  const rem = pwField('Password attuale', 'current-password');
+  const remove = h('button', { class: 'btn danger', type: 'button', onclick: () => {
+    const c0 = rem.input.value;
+    rem.input.value = '';
+    lockAction(remove, () => api.lock.remove(c0), 'Password rimossa: Quadra si apre senza.');
+  } }, 'Rimuovi la password');
+  const c = section('Sicurezza', 'La password è attiva: Quadra la chiede a ogni apertura.', note,
+    h('div', { class: 'prefrow' }, h('span', { text: 'Blocca dopo inattività del computer' }), sel),
+    h('div', { class: 'prefrow' }, h('span', { text: 'Blocca adesso' }), h('button', { class: 'btn', type: 'button', onclick: () => api.lock.lock().catch((e) => toast(errMsg(e), 'error')) }, 'Blocca')),
+    h('div', { class: 'sec-form' }, h('h3', { text: 'Cambia password' }), h('div', { class: 'sec-grid' }, cur.row, n1.row, n2.row), h('div', {}, change)),
+    h('div', { class: 'sec-form' }, h('h3', { text: 'Rimuovi password' }), h('div', { class: 'sec-grid' }, rem.row), h('div', {}, remove)),
+    h('p', { class: 'sec-note', text: 'Dopo 5 tentativi sbagliati l\'accesso si blocca per un tempo che raddoppia a ogni errore (fino a 15 minuti). Se la dimentichi: chiudi Quadra ed elimina il file ~/.config/quadra/lock.json (serve avere accesso al tuo account sul computer).' }));
+  c.id = 'card-sicurezza';
+  return c;
+}
+
 function renderSettings() {
   const y = $('#view')?.firstElementChild?.scrollTop || 0;
   const view = $('#view');
@@ -287,7 +343,7 @@ function renderSettings() {
   } }, settingsDirty ? 'Salva modifiche' : 'Salvato');
   view.replaceChildren(h('div', { class: 'settings' },
     S.secure ? null : h('div', { class: 'banner warn', role: 'alert' }, 'Il portachiavi di sistema non è disponibile: le chiavi sono salvate in un file leggibile solo da te (permessi 600).'),
-    appearanceCard(), dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), updateCard(), advancedCard(),
+    appearanceCard(), securityCard(), dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), updateCard(), advancedCard(),
     h('div', { class: 'savebar' }, save)));
   if (y) view.firstElementChild.scrollTop = y;
 }

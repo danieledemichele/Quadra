@@ -2,7 +2,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Menu, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Menu, session, powerMonitor } = require('electron');
 
 app.setPath('userData', path.join(os.homedir(), '.config', 'quadra'));
 app.setName('Quadra');
@@ -13,6 +13,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const { ConfigStore, PROVIDER_PRESETS } = require('./src/core/config');
+const { AppLock } = require('./src/core/lock');
 const { Store } = require('./src/core/store');
 const { Dropbox } = require('./src/core/dropbox');
 const { Notion } = require('./src/core/notion');
@@ -27,6 +28,7 @@ const DEV = process.argv.includes('--dev');
 let win = null;
 let worker = null;
 let svc = null;
+let lock = null;
 let job = null;
 
 // ---------- cifratura dei segreti ----------
@@ -99,7 +101,7 @@ function buildServices() {
     execFile(cmd, args, { timeout: 600000 }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { stderr })) : resolve(stdout)));
   });
   const updater = new Updater({ config, currentVersion: app.getVersion(), dir: path.join(dir, 'updates'), run });
-  const send = (ch) => (payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
+  const send = (ch) => (payload) => { if (win && !win.isDestroyed() && !lock.isLocked()) win.webContents.send(ch, payload); };
   pipeline.on('item', send('evt:item'));
   pipeline.on('removed', send('evt:removed'));
   pipeline.on('progress', send('evt:progress'));
@@ -111,9 +113,12 @@ function buildServices() {
 
 // ---------- IPC ----------
 
-function handle(channel, fn) {
+// Con la password attiva, finché Quadra è bloccata nessun canale risponde (tranne quelli per sbloccare):
+// il blocco è imposto qui, nel processo principale, non solo nell'interfaccia.
+function handle(channel, fn, { open = false } = {}) {
   ipcMain.handle(channel, async (event, ...args) => {
     if (!win || event.sender !== win.webContents) return { ok: false, error: 'Origine non autorizzata.' };
+    if (!open && lock.isLocked()) return { ok: false, error: 'Quadra è bloccata: inserisci la password.' };
     try {
       return { ok: true, data: await fn(...args) };
     } catch (e) {
@@ -122,7 +127,7 @@ function handle(channel, fn) {
   });
 }
 
-const notifyJob = (running, kind) => { if (win && !win.isDestroyed()) win.webContents.send('evt:job', { running, kind }); };
+const notifyJob = (running, kind) => { if (win && !win.isDestroyed() && !lock.isLocked()) win.webContents.send('evt:job', { running, kind }); };
 
 async function runJob(kind, fn) {
   if (job) throw new Error('Un\'altra operazione è ancora in corso.');
@@ -218,6 +223,13 @@ function registerIpc() {
     });
   });
 
+  handle('lock:status', () => lock.status(), { open: true });
+  handle('lock:unlock', (pw) => lock.unlock(pw), { open: true });
+  handle('lock:lock', () => lock.lock());
+  handle('lock:set', (pw, current) => lock.setPassword(pw, current));
+  handle('lock:remove', (pw) => lock.removePassword(pw));
+  handle('lock:autolock', (min) => lock.setAutoLock(min));
+
   handle('items:list', () => pipeline.list());
   handle('items:update', (id, data, contoId) => pipeline.updateEdits(id, data, contoId));
   handle('items:confirm', async (id, data, contoId) => { const it = await pipeline.confirm(id, data, contoId); expenses.markStale(); return it; });
@@ -271,8 +283,17 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   if (!DEV) Menu.setApplicationMenu(null);
+  lock = new AppLock({ file: path.join(app.getPath('userData'), 'lock.json') });
   svc = buildServices();
   createWindow();
+  // Al blocco la finestra si ricarica: nella pagina non resta nessun dato, solo la schermata della password.
+  lock.on('change', (st) => { if (st.locked && win && !win.isDestroyed()) win.webContents.reload(); });
+  powerMonitor.on('lock-screen', () => lock.lock());
+  powerMonitor.on('suspend', () => lock.lock());
+  setInterval(() => {
+    const st = lock.status();
+    if (st.enabled && !st.locked && st.autoLockMin > 0 && powerMonitor.getSystemIdleTime() >= st.autoLockMin * 60) lock.lock();
+  }, 15000);
   registerIpc();
   const autoCheck = () => { if (svc.config.get().update.autoCheck) svc.updater.check({ silent: true }).catch(() => {}); };
   setTimeout(autoCheck, 8000);

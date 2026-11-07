@@ -20,9 +20,10 @@ function renderActions() {
     box.replaceChildren(h('button', { class: 'btn danger', type: 'button', onclick: () => api.scan.cancel().catch(() => {}) }, 'Annulla'));
     return;
   }
-  box.replaceChildren(
+  box.replaceChildren(...[
+    S.lock?.enabled ? h('button', { class: 'btn', type: 'button', title: 'Blocca Quadra (richiede la password per riaprirla)', onclick: () => api.lock.lock().catch((e) => toast(errMsg(e), 'error')) }, 'Blocca') : null,
     h('button', { class: 'btn', type: 'button', onclick: importFlow }, 'Importa foto…'),
-    h('button', { class: 'btn primary', type: 'button', id: 'btn-scan', onclick: startScan }, 'Scansiona Dropbox'));
+    h('button', { class: 'btn primary', type: 'button', id: 'btn-scan', onclick: startScan }, 'Scansiona Dropbox')].filter(Boolean));
 }
 
 function updateChrome() {
@@ -252,6 +253,8 @@ function wireKeys() {
 }
 
 async function init() {
+  try { S.lock = await api.lock.status(); } catch { S.lock = { enabled: false, locked: false }; }
+  if (S.lock.locked) { showLockScreen(S.lock); return; } // bloccata: non si carica nulla
   wireEvents();
   wireKeys();
   renderStatusbar();

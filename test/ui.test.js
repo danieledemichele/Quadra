@@ -57,6 +57,7 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   await shot(page, '0-dashboard-week');
   await page.click('.seg-btn:has-text("Mese")');
   await page.waitForFunction(() => document.querySelector('.range').textContent === 'novembre 2026');
+  await page.waitForSelector('polyline.line.cur');
   assert.ok(await page.locator('polyline.line.cur').count() === 1, 'ritmo del mese');
   await page.waitForSelector('polyline.line.cur');
   assert.ok(await page.locator('.dcard:has(h3:text-is("Spesa giornaliera")) text.lab:not(.sub)').count() >= 8);
@@ -159,6 +160,18 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   assert.equal(await page.locator('.dcard:has(h3:has-text("Movimenti"))').count(), 0, 'sezione nascosta');
   await shot(page, '5c-dashboard-custom');
   await page.click('.tab:has-text("Impostazioni")');
+  // password di accesso: attivazione con conferma, poi blocco manuale
+  await page.fill('#card-sicurezza input >> nth=0', 'abc');
+  await page.fill('#card-sicurezza input >> nth=1', 'diversa');
+  await page.click('#card-sicurezza button:has-text("Attiva")');
+  assert.equal(await page.locator('#card-sicurezza h3').count(), 0, 'password non coincidenti: non si attiva');
+  await page.fill('#card-sicurezza input >> nth=0', 'una-password-lunga');
+  await page.fill('#card-sicurezza input >> nth=1', 'una-password-lunga');
+  await page.click('#card-sicurezza button:has-text("Attiva")');
+  await page.waitForSelector('#card-sicurezza h3:has-text("Cambia password")');
+  assert.ok(await page.locator('#actions button:has-text("Blocca")').count() === 1, 'pulsante Blocca nella barra');
+  assert.ok(!/null/.test(await page.locator('#actions').innerText()), 'nessun "null" nella barra');
+  await shot(page, '5d-security');
   await page.click('#card-aspetto button:has-text("Ripristina")');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme || 'auto'), 'auto');
   assert.equal(await page.locator('.mrow').count(), 2);
@@ -186,6 +199,39 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   await shot(page, '8-dark');
 
   assert.deepEqual(problems, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('interfaccia: con la password attiva si vede solo la schermata di blocco', { skip: !chromium && 'playwright non installato' }, async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1180, height: 800 } });
+    page.setDefaultTimeout(8000);
+    const problems = [];
+    page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
+    await page.addInitScript(() => { window.__startLocked = true; });
+    await page.addInitScript({ content: fs.readFileSync(path.join(__dirname, 'ui-stub.js'), 'utf8') });
+    await page.addInitScript(() => { /* la finta app dà la password giusta */ });
+    await page.goto(pathToFileURL(path.join(__dirname, '..', 'src', 'renderer', 'index.html')).href);
+    await page.waitForSelector('#lock-pw');
+    assert.equal(await page.locator('.tab').count(), 0, 'nessuna scheda caricata');
+    assert.equal(await page.locator('.dash, .kpi, .item').count(), 0, 'nessun dato nella pagina');
+    assert.equal(await page.isVisible('header.top'), false);
+    await page.fill('#lock-pw', 'sbagliata');
+    await page.press('#lock-pw', 'Enter');
+    await page.waitForFunction(() => /errata/.test(document.querySelector('.lock-msg').textContent));
+    assert.equal(await page.inputValue('#lock-pw'), '', 'il campo si svuota dopo il tentativo');
+    for (let i = 0; i < 2; i++) {
+      await page.fill('#lock-pw', 'x'); await page.press('#lock-pw', 'Enter');
+      await page.waitForFunction(() => !document.querySelector('#lock-pw').value);
+      await page.waitForTimeout(100);
+    }
+    await page.waitForFunction(() => document.querySelector('.lock-msg').textContent.includes('30'));
+    await page.waitForFunction(() => document.querySelector('#lock-pw').disabled, null, { timeout: 4000 });
+    await shot(page, '9-lock');
+    assert.deepEqual(problems, []);
   } finally {
     await browser.close();
   }

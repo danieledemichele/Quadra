@@ -98,6 +98,18 @@
         return wait(true);
       },
     },
+    lock: (() => {
+      const st = { enabled: false, locked: !!window.__startLocked, retryInS: 0, autoLockMin: 15 };
+      let pw = null, fails = 0;
+      return {
+        status: () => wait({ ...st }),
+        unlock: (p) => { rec('unlock'); if (p === pw) { st.locked = false; return wait({ ...st }); } fails++; return Promise.reject(new Error(fails >= 3 ? 'Password errata. Riprova tra 30 secondi.' : 'Password errata (4 tentativi prima del blocco temporaneo).')); },
+        lock: () => { rec('lock'); st.locked = true; return wait({ ...st }); },
+        set: (p, cur) => { if (st.enabled && cur !== pw) return Promise.reject(new Error('Password errata.')); pw = p; st.enabled = true; return wait({ ...st }); },
+        remove: (cur) => { if (cur !== pw) return Promise.reject(new Error('Password errata.')); pw = null; st.enabled = false; return wait({ ...st }); },
+        autolock: (m) => { st.autoLockMin = m; return wait({ ...st }); },
+      };
+    })(),
     conti: { list: () => wait([{ id: 'c1', name: 'Postepay' }, { id: 'c2', name: 'Conto Intesa' }, { id: 'c3', name: 'Contanti' }]) },
     on: (ev, cb) => { (handlers[ev] = handlers[ev] || []).push(cb); return () => {}; },
   };

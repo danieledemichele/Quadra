@@ -240,7 +240,7 @@ textarea { resize: vertical; font-family: var(--mono); font-size: 13px; }
 .table tr.discarded td { opacity: .55; }
 
 /* impostazioni */
-.settings { flex: 1; overflow: auto; padding: 24px 28px 96px; display: grid; gap: 20px; align-content: start; max-width: 860px; margin: 0 auto; width: 100%; }
+.settings { flex: 1; overflow: auto; padding: 24px 28px 96px; display: grid; gap: 20px; align-content: start; max-width: var(--maxw); margin: 0 auto; width: 100%; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); align-items: start; padding-left: clamp(16px, 2.4vw, 40px); padding-right: clamp(16px, 2.4vw, 40px); }
 .card { background: var(--surface); border-radius: 16px; padding: 18px 20px; display: grid; gap: 14px; box-shadow: var(--shadow-s); }
 .card h2 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
 .card h3 { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
@@ -415,3 +415,20 @@ input[type=checkbox]:disabled { opacity: .5; }
 .prefrow:has(.checks) { align-items: flex-start; }
 .prefrow .checks { flex: 1; min-width: 280px; max-width: 520px; }
 .sub-h { margin: 14px 0 2px; font-size: 13px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+
+/* blocco */
+.lockroot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); padding: 24px; }
+.lockroot[hidden] { display: none; }
+body.is-locked > :not(#lockroot) { display: none !important; }
+.lock-card { width: min(360px, 100%); display: grid; gap: 12px; justify-items: stretch; text-align: center; background: var(--surface); padding: 32px 28px; border-radius: 22px; box-shadow: var(--shadow-m, 0 10px 40px rgba(0,0,0,.12)); }
+.lock-card h1 { margin: 6px 0 0; font-size: 22px; letter-spacing: -.02em; }
+.lock-card .brand-mark.big { width: 56px; height: 56px; border-radius: 14px; margin: 0 auto; }
+.lock-card .muted { margin: 0 0 4px; }
+.lock-msg { min-height: 1.3em; margin: 0; color: var(--red, #d70015); font-size: 13px; }
+.sec-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); width: 100%; }
+.sec-form { display: grid; gap: 10px; padding: 10px 0; border-bottom: .5px solid var(--sep); }
+.sec-form:last-child { border-bottom: 0; }
+.sec-form h3 { margin: 0; font-size: 14px; }
+.sec-note { font-size: 12.5px; color: var(--ink-3); margin: 0; }
+.settings > .banner, .settings > .savebar { grid-column: 1 / -1; }
+.settings > .card:nth-child(n) { min-width: 0; }

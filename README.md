@@ -80,9 +80,20 @@ La pagina iniziale mostra le spese della **settimana** o del **mese** (con le fr
 
 In Impostazioni → **Aspetto** (si applica subito, valido su questo computer): tema chiaro/scuro/automatico, colore principale, dimensione del testo, densità, larghezza del contenuto (anche a tutto schermo: i grafici si adattano alla finestra), periodo iniziale della Panoramica, colore di ogni persona e sezioni da mostrare o nascondere.
 
+## Password di accesso
+
+In Impostazioni → **Sicurezza** puoi chiedere una password per aprire Quadra (minimo 8 caratteri). Si può cambiare, rimuovere, e bloccare l'app a mano (pulsante *Blocca*) o dopo un periodo di inattività del computer; si blocca anche con lo schermo bloccato o in sospensione.
+
+- La password è salvata solo come hash **scrypt** con sale casuale, in `~/.config/quadra/lock.json` (permessi 600). Non viene mai registrata né mostrata.
+- Il blocco è applicato dal processo principale: finché è bloccata, nessun dato (Notion, Dropbox, scontrini, impostazioni) è raggiungibile, e la pagina si svuota.
+- Dopo 5 tentativi sbagliati scatta un'attesa che raddoppia a ogni errore (30 s … 15 min), valida anche dopo un riavvio.
+- È un blocco dell'applicazione: non sostituisce la cifratura del disco né il blocco schermo del sistema. Se la dimentichi, chiudi Quadra ed elimina `lock.json`.
+
 ## Aggiornamento in un clic
 
 Quadra controlla su GitHub se c'è una release più recente (all'avvio e ogni 6 ore; si può disattivare). Se c'è, in alto compare **«Quadra X è disponibile — Aggiorna ora»**: scarica il `.deb`, ne verifica la firma sha256 pubblicata da GitHub e lo installa chiedendo la password di sistema (pkexec). Poi si riavvia da solo.
+
+**Sicurezza dell'aggiornamento:** si accetta solo il pacchetto `quadra_X.Y.Z_<arch>.deb` della release più recente, con firma sha256 fornita da GitHub (senza firma non si installa). L'installazione gira da root su una copia del file in una cartella di root, dove ricontrolla sha256, nome del pacchetto e versione prima di installare: nessun altro processo può sostituire il file nel frattempo. La password di sistema la chiede il sistema (pkexec): Quadra non la vede. Chi può pubblicare release su GitHub può far installare codice sul tuo computer: proteggi l'account con l'autenticazione a due fattori.
 
 - Se il repository è **privato**, in Impostazioni → Aggiornamenti serve un token GitHub *fine-grained* con permesso **Contents: sola lettura** su `danieledemichele/quadra`.
 - Funziona nell'app installata dal pacchetto `.deb` (non con `npm start`).

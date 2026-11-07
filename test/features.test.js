@@ -137,9 +137,13 @@ test('aggiornamento: controllo, download verificato, installazione con pkexec', 
     await up.update();
     assert.deepEqual(states.filter((s, i) => states.indexOf(s) === i), ['checking', 'available', 'downloading', 'installing', 'installed']);
     assert.equal(runs.length, 1);
-    assert.deepEqual(runs[0].slice(0, 5), ['pkexec', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install']);
-    assert.equal(runs[0].at(-1), path.join(dir, 'quadra_1.2.0_amd64.deb'));
-    assert.equal(fs.existsSync(runs[0].at(-1)), false, 'il pacchetto scaricato viene rimosso dopo l\'installazione');
+    assert.deepEqual(runs[0].slice(0, 3), ['pkexec', '/bin/sh', '-c']);
+    assert.match(runs[0][3], /sha256sum -c/, 'la verifica avviene dentro lo script eseguito da root');
+    assert.deepEqual(runs[0].slice(4, 5), ['quadra-update']);
+    assert.equal(runs[0][5], path.join(dir, 'quadra_1.2.0_amd64.deb'));
+    assert.match(runs[0][6], /^[0-9a-f]{64}$/);
+    assert.deepEqual(runs[0].slice(7), ['1.2.0', 'quadra']);
+    assert.equal(fs.existsSync(runs[0][5]), false, 'il pacchetto scaricato viene rimosso dopo l\'installazione');
     assert.equal(t.state.assetAuth, 'Bearer tok123');
   } finally { await t.mock.close(); }
 });
@@ -201,4 +205,93 @@ test('statistiche: ripartizione per persona (spese condivise divise a metà, sen
   assert.equal(s.byPerson.reduce((a, p) => a + p.total, 0), s.total);
   const d = buildStats(ex, { period: 'week', today: '2026-11-07', person: 'Daniele' });
   assert.equal(d.total, 110);
+});
+
+test('aggiornamento: rifiuta repository malformati, pacchetti senza firma o con nome estraneo', async () => {
+  const x = await updaterSetup();
+  try {
+    x.t.config.set?.({});
+    const orig = x.t.config.get;
+    x.t.config.get = () => ({ ...orig.call(x.t.config), update: { ...orig.call(x.t.config).update, repo: '../etc/passwd' } });
+    assert.equal((await x.up.check()).phase, 'error');
+    x.t.config.get = orig;
+    x.t.state.release.assets[0].digest = null;
+    const s = await x.up.check();
+    assert.equal(s.phase, 'error');
+    assert.match(s.error, /firma/);
+    x.t.state.release.assets[0].digest = 'sha256:' + '1'.repeat(64);
+    x.t.state.release.assets[0].name = 'altro_1.2.0_amd64.deb';
+    assert.equal((await x.up.check()).phase, 'error');
+    assert.equal(x.runs.length, 0);
+  } finally { await x.t.mock.close?.(); }
+});
+
+test('aggiornamento: lo script da root copia, verifica sha256 e nome/versione prima di installare', () => {
+  const { execFileSync } = require('node:child_process');
+  const { ROOT_SCRIPT } = require('../src/core/updater');
+  const d = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'qroot-'));
+  const bin = path.join(d, 'bin'); fs.mkdirSync(bin);
+  // finti dpkg-deb e apt-get: registrano cosa succede
+  fs.writeFileSync(path.join(bin, 'dpkg-deb'), '#!/bin/sh\n[ "$3" = Package ] && echo "${FAKE_PKG:-quadra}" || echo "${FAKE_VER:-1.2.0}"\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'apt-get'), '#!/bin/sh\necho "$@" >> "$LOG"\n', { mode: 0o755 });
+  const pkg = path.join(d, 'p.deb'); fs.writeFileSync(pkg, 'contenuto');
+  const sha = crypto.createHash('sha256').update('contenuto').digest('hex');
+  const run = (extra, sh = sha, ver = '1.2.0') => execFileSync('/bin/sh', ['-c', ROOT_SCRIPT, 'x', pkg, sh, ver, 'quadra'], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, LOG: path.join(d, 'log'), ...extra }, stdio: 'pipe' });
+  run({});
+  assert.match(fs.readFileSync(path.join(d, 'log'), 'utf8'), /install -y \/var\/tmp\/quadra-update\./);
+  fs.rmSync(path.join(d, 'log'));
+  assert.throws(() => run({}, '0'.repeat(64)), 'sha256 errata');
+  assert.throws(() => run({ FAKE_PKG: 'altro' }), 'nome pacchetto diverso');
+  assert.throws(() => run({ FAKE_VER: '9.9.9' }), 'versione diversa da quella annunciata');
+  assert.equal(fs.existsSync(path.join(d, 'log')), false, 'nessuna installazione in caso di errore');
+  assert.deepEqual(fs.readdirSync('/var/tmp').filter((n) => n.startsWith('quadra-update.')), [], 'cartella temporanea ripulita');
+});
+
+// ---------- password di accesso ----------
+
+test('blocco: hash scrypt, nessuna password in chiaro, permessi 0600, cambio e rimozione', async () => {
+  const { AppLock } = require('../src/core/lock');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lock-')), 'lock.json');
+  const L = new AppLock({ file: f, params: { N: 1024, r: 8, p: 1 } });
+  assert.equal(L.isLocked(), false);
+  await assert.rejects(L.setPassword('corta'), /almeno 8/);
+  await L.setPassword('una-password-lunga');
+  const raw = fs.readFileSync(f, 'utf8');
+  assert.ok(!raw.includes('una-password-lunga'));
+  assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+  L.lock();
+  assert.equal(L.isLocked(), true);
+  await assert.rejects(L.unlock('sbagliata'), /errata/);
+  await L.unlock('una-password-lunga');
+  assert.equal(L.isLocked(), false);
+  // riavvio: parte bloccata
+  const L2 = new AppLock({ file: f, params: { N: 1024, r: 8, p: 1 } });
+  assert.equal(L2.isLocked(), true);
+  await L2.unlock('una-password-lunga');
+  await assert.rejects(L2.setPassword('nuova-password-1', 'sbagliata'), /errata/);
+  await L2.setPassword('nuova-password-1', 'una-password-lunga');
+  await assert.rejects(L2.removePassword('una-password-lunga'), /errata/);
+  await L2.removePassword('nuova-password-1');
+  assert.equal(L2.isSet(), false);
+  assert.equal(fs.existsSync(f), false);
+});
+
+test('blocco: dopo 5 errori scatta l\'attesa crescente, anche dopo il riavvio e con tentativi in parallelo', async () => {
+  const { AppLock } = require('../src/core/lock');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lock-')), 'lock.json');
+  let t = 1_000_000;
+  const mk = () => new AppLock({ file: f, now: () => t, params: { N: 1024, r: 8, p: 1 } });
+  const L = mk();
+  await L.setPassword('una-password-lunga');
+  L.lock();
+  const res = await Promise.allSettled(Array.from({ length: 8 }, () => L.unlock('no')));
+  assert.ok(res.every((r) => r.status === 'rejected'));
+  assert.match(res[7].reason.message, /Troppi tentativi/);
+  assert.equal(L.isLocked(), true);
+  await assert.rejects(mk().unlock('una-password-lunga'), /Troppi tentativi/, 'il riavvio non azzera l\'attesa');
+  t += 31_000;
+  await assert.rejects(L.unlock('no'), /Riprova tra 60/, 'attesa raddoppiata');
+  t += 61_000;
+  await L.unlock('una-password-lunga');
+  assert.equal(L.status().retryInS, 0);
 });
