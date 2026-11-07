@@ -189,6 +189,36 @@ function storesCard() {
       : h('p', { class: 'muted', text: 'Quando correggi il nome di un negozio prima di inviare, l\'app se lo ricorda per le volte successive.' }));
 }
 
+function paintUpdateStatus() {
+  const box = $('#upd-status');
+  if (!box) return;
+  const u = S.update;
+  const txt = u.phase === 'checking' ? 'Controllo…'
+    : u.phase === 'available' ? `Disponibile la versione ${u.latest}.`
+    : u.phase === 'none' ? 'Hai l\'ultima versione.'
+    : u.phase === 'downloading' ? `Scarico… ${Math.round((u.progress || 0) * 100)}%`
+    : u.phase === 'installing' ? 'Installazione in corso…'
+    : u.phase === 'installed' ? 'Installato: riavvio…'
+    : u.phase === 'error' ? u.error : 'Non ancora controllato in questa sessione.';
+  box.replaceChildren(
+    badge(u.phase === 'available' ? 'aggiornamento' : u.phase === 'error' ? 'errore' : 'versione ' + (S.version || u.current || ''), u.phase === 'available' ? 'ok' : u.phase === 'error' ? 'err' : ''),
+    h('span', { class: u.phase === 'error' ? 'hint err' : 'muted', text: txt }),
+    h('button', { class: 'btn small', type: 'button', disabled: ['checking', 'downloading', 'installing'].includes(u.phase), onclick: () => { S.updateManual = true; api.update.check().catch((e) => toast(errMsg(e), 'error')); } }, 'Controlla ora'),
+    u.phase === 'available' ? h('button', { class: 'btn small primary', type: 'button', onclick: installUpdate }, `Installa ${u.latest}`) : null);
+}
+
+function updateCard() {
+  const d = S.draft.update;
+  const card = section('Aggiornamenti', 'Quadra controlla le nuove versioni su GitHub e si aggiorna con un clic (serve la password di sistema).',
+    h('div', { class: 'status-line', id: 'upd-status' }),
+    h('label', { class: 'check big' }, h('input', { type: 'checkbox', checked: d.autoCheck !== false, onchange: (e) => { d.autoCheck = e.target.checked; markDirty(); } }), h('span', { text: 'Controlla in automatico (all\'avvio e ogni 6 ore)' })),
+    h('div', { class: 'grid2' },
+      field('Repository GitHub', textInput(d, 'repo', { placeholder: 'utente/nome' })),
+      field('Token GitHub (solo se il repository è privato)', secretInput(d, 'token', 'github_pat_…'), 'Fine-grained token con permesso «Contents: sola lettura» su questo repository.')));
+  setTimeout(paintUpdateStatus, 0);
+  return card;
+}
+
 function advancedCard() {
   const d = S.draft;
   return section('Avanzate', null,
@@ -209,7 +239,7 @@ function renderSettings() {
   } }, settingsDirty ? 'Salva modifiche' : 'Salvato');
   view.replaceChildren(h('div', { class: 'settings' },
     S.secure ? null : h('div', { class: 'banner warn', role: 'alert' }, 'Il portachiavi di sistema non è disponibile: le chiavi sono salvate in un file leggibile solo da te (permessi 600).'),
-    dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), advancedCard(),
+    dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), updateCard(), advancedCard(),
     h('div', { class: 'savebar' }, save)));
   if (y) view.firstElementChild.scrollTop = y;
 }

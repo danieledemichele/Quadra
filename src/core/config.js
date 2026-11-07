@@ -36,6 +36,7 @@ function defaults() {
       { id: 'm-qwen38', providerId: 'groq', model: 'qwen/qwen3.8-27b', enabled: true, jsonMode: true },
       { id: 'm-scout', providerId: 'groq', model: 'meta-llama/llama-4-scout-17b-16e-instruct', enabled: true, jsonMode: true },
     ],
+    update: { repo: 'danieledemichele/quadra', token: '', autoCheck: true },
     knownStores: [...DEFAULT_STORES],
     aliases: {},
     attachPhotos: true,
@@ -115,6 +116,11 @@ function normalizeSettings(input) {
       databaseId: str(s.notion?.databaseId, d.notion.databaseId).trim().replace(/-/g, ''),
       budgetDatabaseId: str(s.notion?.budgetDatabaseId, d.notion.budgetDatabaseId).trim().replace(/-/g, ''),
     },
+    update: {
+      repo: /^[\w.-]+\/[\w.-]+$/.test(str(s.update?.repo).trim()) ? s.update.repo.trim() : d.update.repo,
+      token: str(s.update?.token),
+      autoCheck: s.update?.autoCheck !== false,
+    },
     providers,
     models,
     knownStores,
@@ -129,6 +135,7 @@ function eachSecret(settings, fn) {
   fn(settings.dropbox, 'appSecret');
   fn(settings.dropbox, 'refreshToken');
   fn(settings.notion, 'apiKey');
+  fn(settings.update, 'token');
   for (const p of settings.providers) fn(p, 'apiKey');
 }
 
@@ -190,8 +197,10 @@ class ConfigStore {
     const next = clone(patch);
     next.dropbox = next.dropbox || {};
     next.notion = next.notion || {};
+    next.update = next.update || {};
     for (const k of ['appSecret', 'refreshToken']) if (next.dropbox[k] === SECRET_KEEP) next.dropbox[k] = cur.dropbox[k];
     if (next.notion.apiKey === SECRET_KEEP) next.notion.apiKey = cur.notion.apiKey;
+    if (next.update.token === SECRET_KEEP) next.update.token = cur.update.token;
     for (const p of next.providers || []) {
       if (p.apiKey === SECRET_KEEP) p.apiKey = cur.providers.find((x) => x.id === p.id)?.apiKey || '';
     }

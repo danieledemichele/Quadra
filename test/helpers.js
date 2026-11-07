@@ -49,6 +49,20 @@ async function startMock(state) {
         Allegati: { type: 'files' }, Categoria: { type: 'formula' }, Tipo: { type: 'formula' },
       } });
     }
+    if (url === '/v1/data_sources/ds-uscite/query') {
+      state.queries = (state.queries || 0) + 1;
+      const rows = state.expenseRows || [];
+      return send(200, { results: rows, has_more: false });
+    }
+    if (url.startsWith('/repos/') && url.endsWith('/releases/latest')) {
+      if (state.releaseStatus) return send(state.releaseStatus, { message: 'x' });
+      return send(200, state.release);
+    }
+    if (url.startsWith('/repos/') && url.includes('/releases/assets/')) {
+      state.assetAuth = req.headers.authorization || null;
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      return res.end(state.assetBytes);
+    }
     if (url === '/v1/data_sources/ds-conti/query') return send(200, { results: [{ id: 'conto-1', properties: { Nome: { type: 'title', title: [{ plain_text: 'Postepay' }] } } }], has_more: false });
     if (url === '/v1/data_sources/ds-budget/query') {
       const m = body.filter.rich_text.equals;
@@ -106,4 +120,4 @@ async function setup(overrides = {}) {
   return { state, mock, dir, config, store, dropbox, notion, extractor, pipeline };
 }
 
-module.exports = { setup, ok };
+module.exports = { setup, ok, startMock };

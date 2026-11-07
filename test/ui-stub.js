@@ -28,6 +28,7 @@
       { id: 'm1', providerId: 'groq', model: 'qwen/qwen3.8-27b', enabled: true, jsonMode: true },
       { id: 'm2', providerId: 'groq', model: 'meta-llama/llama-4-scout-17b-16e-instruct', enabled: true, jsonMode: true },
     ],
+    update: { repo: 'danieledemichele/quadra', token: K, autoCheck: true },
     knownStores: ['Conad', 'Eurospin', 'Lidl', 'MD'], aliases: { 'sup. tiziano': 'Conad' }, maxMegapixels: 2, maxWaitSeconds: 120,
   };
   const wait = (v, ms = 5) => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms));
@@ -82,6 +83,20 @@
       reextract: (id) => { rec('reextract', id); return wait(items.find((i) => i.id === id)); },
       image: () => wait(jpeg),
       openNotion: (id) => { rec('openNotion', id); return wait(true); },
+    },
+    stats: {
+      get: (o) => { rec('stats', o); return window.nodeStats(o); },
+      refresh: (o) => { rec('statsRefresh', o); return window.nodeStats(o); },
+    },
+    update: {
+      state: () => wait({ phase: 'available', latest: '1.2.0', current: '1.1.0', notes: '## Novità\nPanoramica delle spese e aggiornamento in un clic' }),
+      check: () => wait({ phase: 'none' }),
+      install: () => {
+        rec('install');
+        const seq = [{ phase: 'downloading', latest: '1.2.0', progress: 0.5 }, { phase: 'installing', latest: '1.2.0' }, { phase: 'installed', latest: '1.2.0' }];
+        seq.forEach((st, i) => setTimeout(() => window.__emit('evt:update', st), 30 * (i + 1)));
+        return wait(true);
+      },
     },
     conti: { list: () => wait([{ id: 'c1', name: 'Postepay' }, { id: 'c2', name: 'Conto Intesa' }, { id: 'c3', name: 'Contanti' }]) },
     on: (ev, cb) => { (handlers[ev] = handlers[ev] || []).push(cb); return () => {}; },

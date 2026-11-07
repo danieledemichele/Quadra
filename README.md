@@ -67,6 +67,22 @@ Se correggi il nome di un negozio prima di inviare, l'app **impara la correzione
 
 `Ctrl+Invio` invia · `Canc` scarta · `↑ ↓` (o `j k`) cambiano scontrino.
 
+## Panoramica delle spese
+
+La pagina iniziale mostra le spese della **settimana** o del **mese** (con le frecce ‹ › per spostarti, *Oggi* per tornare al presente) leggendo le uscite (importi negativi) dal database Notion, quindi include anche quelle inserite a mano o da altre app.
+
+- Totale, media al giorno, numero di spese, la più alta, e il confronto col periodo precedente **a parità di giorni** (▼ verde = spendi meno).
+- Grafico giornaliero, ritmo cumulato del mese contro il mese scorso, categorie, negozi dove hai speso di più, ultime 8 settimane / 12 mesi, elenco dei movimenti.
+- Filtro per persona (dal Tag) e pulsante *Aggiorna*. I dati si salvano in locale, così la pagina si apre subito e si aggiorna da sola quando sono vecchi di oltre 10 minuti o dopo un invio.
+
+## Aggiornamento in un clic
+
+Quadra controlla su GitHub se c'è una release più recente (all'avvio e ogni 6 ore; si può disattivare). Se c'è, in alto compare **«Quadra X è disponibile — Aggiorna ora»**: scarica il `.deb`, ne verifica la firma sha256 pubblicata da GitHub e lo installa chiedendo la password di sistema (pkexec). Poi si riavvia da solo.
+
+- Se il repository è **privato**, in Impostazioni → Aggiornamenti serve un token GitHub *fine-grained* con permesso **Contents: sola lettura** su `danieledemichele/quadra`.
+- Funziona nell'app installata dal pacchetto `.deb` (non con `npm start`).
+- Le release si pubblicano creando un tag `v*`: il flusso GitHub costruisce e allega il `.deb`.
+
 ## Aggiungere altri modelli o provider
 
 Impostazioni → *Modelli di lettura*.
@@ -93,7 +109,7 @@ Impostazioni → *Modelli di lettura*.
 ## Sviluppo
 
 ```bash
-npm test          # 10 test sul nucleo con server finti + prova dell'interfaccia (se c'è Playwright)
+npm test          # test sul nucleo (Dropbox/Notion/modelli/statistiche/aggiornamento) con server finti + prova dell'interfaccia (se c'è Playwright)
 ```
 
 Struttura: `main.js` (processo principale, IPC, finestra), `preload.js` (ponte sicuro), `src/core/` (Dropbox, Notion, modelli, flusso), `src/renderer/` (interfaccia).

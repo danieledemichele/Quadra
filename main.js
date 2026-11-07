@@ -18,7 +18,10 @@ const { Dropbox } = require('./src/core/dropbox');
 const { Notion } = require('./src/core/notion');
 const { Extractor } = require('./src/core/extractor');
 const { Pipeline } = require('./src/core/pipeline');
+const { ExpenseService } = require('./src/core/expenses');
+const { Updater } = require('./src/core/updater');
 const { isAbort } = require('./src/core/util');
+const { execFile } = require('node:child_process');
 
 const DEV = process.argv.includes('--dev');
 let win = null;
@@ -91,13 +94,19 @@ function buildServices() {
   const extractor = new Extractor({ config });
   const pipeline = new Pipeline({ config, store, dropbox, notion, extractor, prepareImage, cacheDir: path.join(dir, 'cache') });
   pipeline.recover();
+  const expenses = new ExpenseService({ notion, file: path.join(dir, 'expenses.json') });
+  const run = (cmd, args) => new Promise((resolve, reject) => {
+    execFile(cmd, args, { timeout: 600000 }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { stderr })) : resolve(stdout)));
+  });
+  const updater = new Updater({ config, currentVersion: app.getVersion(), dir: path.join(dir, 'updates'), run });
   const send = (ch) => (payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
   pipeline.on('item', send('evt:item'));
   pipeline.on('removed', send('evt:removed'));
   pipeline.on('progress', send('evt:progress'));
   pipeline.on('quota', send('evt:quota'));
   pipeline.on('status', send('evt:status'));
-  return { config, store, dropbox, notion, extractor, pipeline, secureStorage: cryptoAdapter().available };
+  updater.on('state', send('evt:update'));
+  return { config, store, dropbox, notion, extractor, pipeline, expenses, updater, secureStorage: cryptoAdapter().available };
 }
 
 // ---------- IPC ----------
@@ -152,7 +161,24 @@ function safeExternal(url, hosts) {
 }
 
 function registerIpc() {
-  const { config, pipeline, dropbox, notion, extractor } = svc;
+  const { config, pipeline, dropbox, notion, extractor, expenses, updater } = svc;
+
+  const statsOpts = (o) => ({
+    period: o?.period === 'month' ? 'month' : 'week',
+    anchor: /^\d{4}-\d{2}-\d{2}$/.test(o?.anchor || '') ? o.anchor : undefined,
+    person: typeof o?.person === 'string' ? o.person.slice(0, 60) : '',
+  });
+  handle('stats:get', (o) => expenses.view(statsOpts(o)));
+  handle('stats:refresh', async (o) => { await expenses.refresh(); return expenses.view(statsOpts(o)); });
+
+  handle('update:state', () => updater.state);
+  handle('update:check', () => updater.check());
+  handle('update:install', async () => {
+    if (!app.isPackaged) throw new Error('L\'aggiornamento in un clic funziona solo nell\'app installata dal pacchetto .deb.');
+    await updater.update();
+    setTimeout(() => { app.relaunch(); app.exit(0); }, 1200);
+    return true;
+  });
 
   handle('settings:get', () => ({ settings: config.getPublic(), secureStorage: svc.secureStorage, version: app.getVersion() }));
   handle('settings:save', (s) => config.applyPublic(s));
@@ -194,8 +220,8 @@ function registerIpc() {
 
   handle('items:list', () => pipeline.list());
   handle('items:update', (id, data, contoId) => pipeline.updateEdits(id, data, contoId));
-  handle('items:confirm', (id, data, contoId) => pipeline.confirm(id, data, contoId));
-  handle('items:confirmMany', (ids) => pipeline.confirmMany(Array.isArray(ids) ? ids : []));
+  handle('items:confirm', async (id, data, contoId) => { const it = await pipeline.confirm(id, data, contoId); expenses.markStale(); return it; });
+  handle('items:confirmMany', async (ids) => { const r = await pipeline.confirmMany(Array.isArray(ids) ? ids : []); expenses.markStale(); return r; });
   handle('items:discard', (id) => pipeline.discard(id));
   handle('items:reextract', (id) => runJob('reextract', (signal) => pipeline.reextract(id, signal)));
   handle('items:image', async (id) => {
@@ -248,6 +274,9 @@ app.whenReady().then(() => {
   svc = buildServices();
   createWindow();
   registerIpc();
+  const autoCheck = () => { if (svc.config.get().update.autoCheck) svc.updater.check({ silent: true }).catch(() => {}); };
+  setTimeout(autoCheck, 8000);
+  setInterval(autoCheck, 6 * 3600 * 1000);
   if (DEV) win.webContents.openDevTools({ mode: 'detach' });
 });
 

@@ -197,6 +197,41 @@ class Notion {
     return { pageId: page.id, url: page.url, categoria, tipo, budgetLinked: !!budgetId, warnings };
   }
 
+  // Tutte le righe con data >= fromIso (per la panoramica delle spese).
+  async listExpenses(fromIso, signal) {
+    const s = await this.schema(signal);
+    if (!s.date || !s.amount) throw new Error('Nel database Uscite mancano le colonne Data e/o Importo.');
+    const out = [];
+    let cursor;
+    for (let page = 0; page < 60; page++) {
+      const j = await this._req('POST', `/v1/data_sources/${s.dataSourceId}/query`, {
+        page_size: 100,
+        filter: { property: s.date.name, date: { on_or_after: fromIso } },
+        sorts: [{ property: s.date.name, direction: 'descending' }],
+        ...(cursor ? { start_cursor: cursor } : {}),
+      }, signal);
+      for (const p of j.results || []) {
+        const pr = p.properties || {};
+        const date = pr[s.date.name]?.date?.start?.slice(0, 10);
+        const amount = pr[s.amount.name]?.number;
+        if (!date || typeof amount !== 'number') continue;
+        const tag = s.tags ? pr[s.tags.name] : null;
+        const people = (tag?.multi_select || (tag?.select ? [tag.select] : [])).map((x) => x.name).filter(Boolean);
+        out.push({
+          id: p.id,
+          date,
+          store: plain(pr[s.title]?.title).trim(),
+          amount,
+          categoria: formulaText(pr[s.categoria?.name]),
+          people,
+        });
+      }
+      if (!j.has_more) break;
+      cursor = j.next_cursor;
+    }
+    return out;
+  }
+
   async test(signal) {
     const s = await this.schema(signal);
     const conti = await this.listConti(signal).catch(() => []);

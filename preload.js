@@ -6,7 +6,7 @@ const call = (channel, ...args) => ipcRenderer.invoke(channel, ...args).then((r)
   throw new Error((r && r.error) || 'Errore sconosciuto');
 });
 
-const EVENTS = new Set(['evt:item', 'evt:removed', 'evt:progress', 'evt:quota', 'evt:status', 'evt:job']);
+const EVENTS = new Set(['evt:item', 'evt:removed', 'evt:progress', 'evt:quota', 'evt:status', 'evt:job', 'evt:update']);
 
 contextBridge.exposeInMainWorld('quadra', {
   settings: {
@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('quadra', {
     image: (id) => call('items:image', id),
     openNotion: (id) => call('items:openNotion', id),
   },
+  stats: { get: (o) => call('stats:get', o), refresh: (o) => call('stats:refresh', o) },
+  update: { state: () => call('update:state'), check: () => call('update:check'), install: () => call('update:install') },
   conti: { list: (refresh) => call('conti:list', refresh) },
   on: (event, cb) => {
     if (!EVENTS.has(event)) return () => {};

@@ -1,7 +1,7 @@
 'use strict';
 /* Avvio, barra superiore, pannello di scansione, eventi dal processo principale. */
 
-const TABS = [['review', 'Da rivedere'], ['history', 'Storico'], ['settings', 'Impostazioni']];
+const TABS = [['dash', 'Panoramica'], ['review', 'Da rivedere'], ['history', 'Storico'], ['settings', 'Impostazioni']];
 let ticker = null;
 
 function reviewCount() { return reviewItems().filter((i) => i.status !== 'processing').length; }
@@ -30,6 +30,40 @@ function updateChrome() {
   renderActions();
 }
 
+// ---------- aggiornamento in un clic ----------
+
+function installUpdate() {
+  S.updateManual = true;
+  api.update.install().catch((e) => toast(errMsg(e), 'error'));
+}
+
+function renderUpdateBar() {
+  const el = $('#updatebar');
+  const u = S.update;
+  const show = ['available', 'downloading', 'installing', 'installed'].includes(u.phase) || (u.phase === 'error' && S.updateManual);
+  if (!show || (u.phase === 'available' && S.updateDismissed === u.latest)) { el.hidden = true; el.replaceChildren(); return; }
+  el.hidden = false;
+  const note = (u.notes || '').split('\n').map((x) => x.trim()).find((x) => x && !x.startsWith('#'));
+  if (u.phase === 'available') {
+    el.replaceChildren(h('div', { class: 'ub-text' }, h('strong', { text: `Quadra ${u.latest} è disponibile` }), note ? h('span', { class: 'muted', text: ` — ${note.slice(0, 120)}` }) : null),
+      h('div', { class: 'ub-actions' },
+        h('button', { class: 'btn small ghost', type: 'button', onclick: () => { S.updateDismissed = u.latest; renderUpdateBar(); } }, 'Dopo'),
+        h('button', { class: 'btn small primary', type: 'button', onclick: installUpdate }, 'Aggiorna ora')));
+  } else if (u.phase === 'downloading') {
+    const fill = h('div', { class: 'bar-fill' });
+    fill.style.width = `${Math.round((u.progress || 0) * 100)}%`;
+    el.replaceChildren(h('div', { class: 'ub-text' }, h('strong', { text: `Scarico Quadra ${u.latest}… ${Math.round((u.progress || 0) * 100)}%` })), h('div', { class: 'bar ub-bar' }, fill));
+  } else if (u.phase === 'installing') {
+    el.replaceChildren(h('div', { class: 'ub-text' }, h('strong', { text: 'Installo l\'aggiornamento…' }), h('span', { class: 'muted', text: ' inserisci la password di sistema quando richiesto.' })));
+  } else if (u.phase === 'installed') {
+    el.replaceChildren(h('div', { class: 'ub-text' }, h('strong', { text: `Quadra ${u.latest} installato: riavvio…` })));
+  } else {
+    el.replaceChildren(h('div', { class: 'ub-text err' }, h('strong', { text: 'Aggiornamento non riuscito. ' }), u.error || ''),
+      h('div', { class: 'ub-actions' }, h('button', { class: 'btn small', type: 'button', onclick: () => { S.updateManual = false; renderUpdateBar(); } }, 'Chiudi'),
+        u.latest ? h('button', { class: 'btn small primary', type: 'button', onclick: installUpdate }, 'Riprova') : null));
+  }
+}
+
 function setTab(tab) {
   if (S.tab === 'settings' && tab !== 'settings' && !S.draft) return;
   S.tab = tab;
@@ -38,7 +72,8 @@ function setTab(tab) {
 }
 
 function renderView() {
-  if (S.tab === 'review') renderReview();
+  if (S.tab === 'dash') renderDashboard();
+  else if (S.tab === 'review') renderReview();
   else if (S.tab === 'history') renderHistory();
   else renderSettings();
 }
@@ -172,6 +207,7 @@ function onItem(item) {
 
 function wireEvents() {
   api.on('evt:item', onItem);
+  api.on('evt:update', (u) => { S.update = u; renderUpdateBar(); if (typeof paintUpdateStatus === 'function') paintUpdateStatus(); });
   api.on('evt:removed', (id) => { S.items.delete(id); if (S.selected === id) S.selected = null; updateChrome(); if (S.tab === 'review') { renderList(); renderDetail(); } });
   api.on('evt:progress', (p) => { S.progress = p; renderScanPanel(); });
   api.on('evt:quota', (q) => { S.quota[q.provider] = q; renderStatusbar(); });
@@ -225,7 +261,9 @@ async function init() {
     S.items = new Map(list.map((i) => [i.id, i]));
   } catch (e) { toast(errMsg(e), 'error'); }
   const needsSetup = !S.settings?.notion?.apiKey || !S.settings?.dropbox?.refreshToken || !S.settings?.providers?.some((p) => p.apiKey || /localhost|127\.0\.0\.1/.test(p.baseUrl));
-  S.tab = needsSetup && ![...S.items.values()].length ? 'settings' : 'review';
+  S.tab = needsSetup && ![...S.items.values()].length ? 'settings' : 'dash';
+  try { S.update = await api.update.state(); } catch { /* ignora */ }
+  renderUpdateBar();
   updateChrome();
   renderView();
   if (needsSetup && S.tab === 'settings') toast('Benvenuto! Inserisci le chiavi di Dropbox, Notion e Groq per iniziare.', 'ok');

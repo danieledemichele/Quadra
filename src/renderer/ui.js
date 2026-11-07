@@ -21,11 +21,13 @@ const S = {
   modelLists: {},
   hist: { q: '', status: 'done' },
   zoom: false,
+  update: { phase: 'idle' },
+  dash: { period: 'week', anchor: null, person: '', data: null, loading: false, refreshing: false, error: null },
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
-const SVG_TAGS = new Set(['svg', 'circle', 'text', 'g', 'path', 'rect']);
+const SVG_TAGS = new Set(['svg', 'circle', 'text', 'g', 'path', 'rect', 'line', 'polyline', 'title']);
 
 function h(tag, props, ...kids) {
   const svg = SVG_TAGS.has(tag);

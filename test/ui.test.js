@@ -5,6 +5,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { buildStats } = require('../src/core/stats');
+
+const STORES = [['Conad', 'Spesa alimentare'], ['Lidl', 'Spesa alimentare'], ['Eurospin', 'Spesa alimentare'], ['Bar Centrale', 'Svago'], ['Farmacia', 'Salute'], ['Benzina', null], ['Cinema', 'Svago']];
+const DATA = [];
+for (let i = 0; i < 160; i++) {
+  const d = new Date(Date.UTC(2026, 10, 7) - i * 86400000 * 1.3).toISOString().slice(0, 10);
+  const [store, cat] = STORES[(i * 3) % STORES.length];
+  DATA.push({ id: 'e' + i, date: d, store, amount: -(8 + ((i * 37) % 60) + (i % 5)), categoria: cat, people: [i % 3 ? 'Daniele' : 'Ettore'] });
+}
+DATA.push({ id: 'in', date: '2026-11-01', store: 'Stipendio', amount: 1500, categoria: null, people: [] });
 
 let chromium = null;
 try { ({ chromium } = require('playwright')); } catch { /* opzionale */ }
@@ -20,9 +30,46 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   const problems = [];
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) problems.push(`console.${m.type()}: ${m.text()}`); });
+  await page.exposeFunction('nodeStats', (o) => ({ stats: buildStats(DATA, { ...o, today: '2026-11-07' }), fetchedAt: Date.now(), stale: false, hasCache: true }));
   await page.addInitScript({ content: fs.readFileSync(path.join(__dirname, 'ui-stub.js'), 'utf8') });
   await page.goto(pathToFileURL(path.join(__dirname, '..', 'src', 'renderer', 'index.html')).href);
 
+  // panoramica (pagina iniziale)
+  await page.waitForSelector('.dash .kpi');
+  assert.match(await page.locator('.tab.active').innerText(), /Panoramica/);
+  assert.equal(await page.locator('.kpi').count(), 4);
+  assert.equal(await page.locator('.range').innerText(), '2 – 8 nov 2026');
+  assert.equal(await page.locator('.dcard.wide').first().locator('rect.cbar').count(), 7);
+  assert.ok(await page.locator('.blist-row').count() >= 2);
+  assert.ok(await page.locator('.move').count() >= 1);
+  const weekTotal = await page.locator('.kpi-v').first().innerText();
+  await shot(page, '0-dashboard-week');
+  await page.click('.seg-btn:has-text("Mese")');
+  await page.waitForFunction(() => document.querySelector('.range').textContent === 'novembre 2026');
+  assert.ok(await page.locator('polyline.line.cur').count() === 1, 'ritmo del mese');
+  assert.equal(await page.locator('.dcard.wide').first().locator('rect.cbar').count(), 30);
+  await shot(page, '0b-dashboard-month');
+  await page.click('button[aria-label="Periodo precedente"]');
+  await page.waitForFunction(() => document.querySelector('.range').textContent === 'ottobre 2026');
+  assert.equal(await page.isDisabled('button[aria-label="Periodo successivo"]'), false);
+  await page.click('button:has-text("Questo mese")');
+  await page.waitForFunction(() => document.querySelector('.range').textContent === 'novembre 2026');
+  assert.equal(await page.isDisabled('button[aria-label="Periodo successivo"]'), true);
+  await page.selectOption('select[aria-label="Persona"]', 'Ettore');
+  await page.waitForFunction(() => window.__calls.some((c) => c[0] === 'stats' && c[1].person === 'Ettore'));
+  await page.click('.seg-btn:has-text("Settimana")');
+  await page.waitForFunction(() => document.querySelector('.range').textContent === '2 – 8 nov 2026');
+  assert.notEqual(await page.locator('.kpi-v').first().innerText(), weekTotal, 'il filtro persona cambia il totale');
+  await page.selectOption('select[aria-label="Persona"]', '');
+
+  // aggiornamento in un clic
+  assert.match(await page.locator('#updatebar').innerText(), /1\.2\.0 è disponibile/);
+  await shot(page, '0c-update-banner');
+  await page.click('#updatebar button:has-text("Aggiorna ora")');
+  await page.waitForFunction(() => document.querySelector('#updatebar').textContent.includes('riavvio'));
+  assert.ok(await page.evaluate(() => window.__calls.some((c) => c[0] === 'install')));
+
+  await page.click('.tab:has-text("Da rivedere")');
   await page.waitForSelector('.row');
   assert.equal(await page.locator('.row').count(), 5);
   assert.match(await page.locator('.tab.active').innerText(), /Da rivedere/);
@@ -101,10 +148,14 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   await page.mouse.wheel(0, 1500);
   await shot(page, '7-settings-bottom');
 
+  assert.ok(await page.locator('h2:has-text("Aggiornamenti")').count() === 1);
+  assert.equal(await page.locator('.settings input[placeholder="utente/nome"]').inputValue(), 'danieledemichele/quadra');
+
   // tema scuro
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.click('.tab:has-text("Da rivedere")');
-  await page.waitForSelector('#f-store');
+  await page.click('.tab:has-text("Panoramica")');
+  await page.waitForSelector('.dash .kpi');
+  await page.waitForTimeout(400);
   await shot(page, '8-dark');
 
   assert.deepEqual(problems, []);
