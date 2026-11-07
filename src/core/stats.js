@@ -65,7 +65,15 @@ function buildStats(expenses, opts = {}) {
 
   const all = expenses.filter((e) => e.amount < 0).map((e) => ({ ...e, spend: -e.amount }));
   const people = [...new Set(all.flatMap((e) => e.people || []))].sort();
-  const list = person ? all.filter((e) => (e.people || []).includes(person)) : all;
+  // Una spesa con più Tag si divide in parti uguali; senza Tag va in "Non assegnato".
+  const UNASSIGNED = 'Non assegnato';
+  const attrib = (e) => {
+    const ps = e.people && e.people.length ? e.people : [UNASSIGNED];
+    return ps.map((n) => ({ name: n, amount: e.spend / ps.length }));
+  };
+  const list = person
+    ? all.filter((e) => (e.people || []).includes(person)).map((e) => ({ ...e, spend: e.spend / e.people.length }))
+    : all;
   const minDate = list.reduce((m, e) => (!m || e.date < m ? e.date : m), null);
 
   const rangeOf = (a) => {
@@ -86,6 +94,12 @@ function buildStats(expenses, opts = {}) {
   const total = sum(items);
   const prevTotal = sum(prevItems);
 
+  const personTotals = (r, maxDays = Infinity) => {
+    const m = new Map();
+    for (const e of all) if (e.date >= r.from && e.date <= r.to && diffDays(e.date, r.from) < maxDays) for (const a of attrib(e)) m.set(a.name, (m.get(a.name) || 0) + a.amount);
+    return m;
+  };
+
   const lastDay = range.to < today ? range.to : today;
   const elapsed = Math.max(0, Math.min(diffDays(lastDay, range.from) + 1, diffDays(range.to, range.from) + 1));
   const partial = range.to >= today && range.from <= today;
@@ -95,15 +109,25 @@ function buildStats(expenses, opts = {}) {
   const nDays = diffDays(range.to, range.from) + 1;
   const byDate = new Map();
   for (const e of items) byDate.set(e.date, (byDate.get(e.date) || 0) + e.spend);
+  const dayPeople = new Map();
+  for (const e of all) {
+    if (e.date < range.from || e.date > range.to) continue;
+    const m = dayPeople.get(e.date) || {};
+    for (const a of attrib(e)) m[a.name] = (m[a.name] || 0) + a.amount;
+    dayPeople.set(e.date, m);
+  }
   const daily = [];
   for (let i = 0; i < nDays; i++) {
     const date = addDays(range.from, i);
     const d = parse(date);
+    const bp = {};
+    for (const [k, v] of Object.entries(dayPeople.get(date) || {})) bp[k] = round2(v);
     daily.push({
       date,
       label: period === 'week' ? DOW[i] : String(d.getUTCDate()),
       sub: period === 'week' ? String(d.getUTCDate()) : '',
       total: round2(byDate.get(date) || 0),
+      byPerson: bp,
       future: date > today,
     });
   }
@@ -118,6 +142,24 @@ function buildStats(expenses, opts = {}) {
     prun = round2(prun + (prevByDate.get(addDays(prevRange.from, i)) || 0));
     prevCumulative.push(prun);
   }
+
+  const curP = personTotals(range);
+  const prevP = personTotals(prevRange, partial ? elapsed : Infinity);
+  const allSum = [...curP.values()].reduce((x, y) => x + y, 0);
+  const inR = (e) => e.date >= range.from && e.date <= range.to;
+  const byPerson = [...new Set([...people, ...(curP.has(UNASSIGNED) ? [UNASSIGNED] : [])])].map((name) => {
+    const t = round2(curP.get(name) || 0);
+    const prev = round2(prevP.get(name) || 0);
+    return {
+      name,
+      total: t,
+      share: allSum > 0 ? t / allSum : 0,
+      perDay: elapsed > 0 ? round2(t / elapsed) : 0,
+      count: all.filter((e) => inR(e) && attrib(e).some((a) => a.name === name)).length,
+      prevTotal: prev,
+      delta: prev > 0 ? round2((t - prev) / prev) : null,
+    };
+  });
 
   const biggestE = items.reduce((m, e) => (!m || e.spend > m.spend ? e : m), null);
 
@@ -144,6 +186,7 @@ function buildStats(expenses, opts = {}) {
     minDate,
     people,
     hasAny: list.length > 0,
+    byPerson,
     total,
     count: items.length,
     avgPerDay: elapsed > 0 ? round2(total / elapsed) : 0,

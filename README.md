@@ -73,7 +73,12 @@ La pagina iniziale mostra le spese della **settimana** o del **mese** (con le fr
 
 - Totale, media al giorno, numero di spese, la più alta, e il confronto col periodo precedente **a parità di giorni** (▼ verde = spendi meno).
 - Grafico giornaliero, ritmo cumulato del mese contro il mese scorso, categorie, negozi dove hai speso di più, ultime 8 settimane / 12 mesi, elenco dei movimenti.
+- **Spesa per persona**: quanto ha speso ciascuno (Tag di Notion), in percentuale e al giorno, con il confronto col periodo precedente e il grafico giornaliero a colori per persona. Una spesa con più Tag si divide in parti uguali; senza Tag va in «Non assegnato».
 - Filtro per persona (dal Tag) e pulsante *Aggiorna*. I dati si salvano in locale, così la pagina si apre subito e si aggiorna da sola quando sono vecchi di oltre 10 minuti o dopo un invio.
+
+## Personalizzazione
+
+In Impostazioni → **Aspetto** (si applica subito, valido su questo computer): tema chiaro/scuro/automatico, colore principale, dimensione del testo, densità, larghezza del contenuto (anche a tutto schermo: i grafici si adattano alla finestra), periodo iniziale della Panoramica, colore di ogni persona e sezioni da mostrare o nascondere.
 
 ## Aggiornamento in un clic
 

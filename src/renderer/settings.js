@@ -230,6 +230,54 @@ function advancedCard() {
     h('p', { class: 'muted', text: `Versione ${S.version}. I dati sono in ~/.config/quadra.` }));
 }
 
+// ---------- aspetto (si applica subito, salvato su questo computer) ----------
+
+function segControl(label, key, options, after) {
+  const box = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+  for (const [v, l] of options) {
+    box.append(h('button', { type: 'button', class: `seg-btn ${P[key] === v ? 'active' : ''}`, 'aria-pressed': String(P[key] === v), onclick: () => { setPref(key, v); after?.(); repaintAppearance(); } }, l));
+  }
+  return box;
+}
+
+function swatchRow(current, onPick) {
+  return h('div', { class: 'swatches' }, Object.entries(PALETTE).map(([k, v]) => {
+    const b = h('button', { type: 'button', class: 'swatch', title: v.label, 'aria-label': v.label, 'aria-pressed': String(current === k), onclick: () => onPick(k) });
+    b.style.background = colorHex(k);
+    return b;
+  }));
+}
+
+const prefRow = (label, control) => h('div', { class: 'prefrow' }, h('span', { text: label }), control);
+
+function repaintAppearance() {
+  const old = $('#card-aspetto');
+  if (old) old.replaceWith(appearanceCard());
+  if (S.tab === 'dash') paintDash();
+}
+
+function appearanceCard() {
+  const people = (S.settings?.people || []).map((p) => p.name);
+  const colorRows = people.map((n, i) => prefRow(`Colore di ${n}`,
+    swatchRow(P.colors[n] || PERSON_DEFAULTS[i % PERSON_DEFAULTS.length], (k) => { P.colors[n] = k; savePrefs(); repaintAppearance(); })));
+  const card = section('Aspetto', 'Queste scelte si applicano subito e valgono solo su questo computer.',
+    prefRow('Tema', segControl('Tema', 'theme', [['auto', 'Automatico'], ['light', 'Chiaro'], ['dark', 'Scuro']])),
+    prefRow('Colore principale', swatchRow(P.accent, (k) => { setPref('accent', k); repaintAppearance(); })),
+    prefRow('Dimensione del testo', segControl('Dimensione del testo', 'textSize', [['s', 'Piccolo'], ['m', 'Normale'], ['l', 'Grande'], ['xl', 'Molto grande']])),
+    prefRow('Densità', segControl('Densità', 'density', [['normal', 'Comoda'], ['compact', 'Compatta']])),
+    prefRow('Larghezza del contenuto', segControl('Larghezza', 'width', [['standard', 'Stretta'], ['wide', 'Ampia'], ['full', 'A tutto schermo']])),
+    h('h3', { class: 'sub-h', text: 'Panoramica' }),
+    prefRow('Periodo iniziale', segControl('Periodo iniziale', 'startPeriod', [['week', 'Settimana'], ['month', 'Mese']], () => { S.dash.period = P.startPeriod; S.dash.anchor = null; })),
+    prefRow('Grafico giornaliero diviso per persona', segControl('Divisione per persona', 'splitChart', [[true, 'Sì'], [false, 'No']].map(([v, l]) => [v, l]))),
+    ...colorRows,
+    h('div', { class: 'prefrow' }, h('span', { text: 'Sezioni visibili' }),
+      h('div', { class: 'checks' }, SECTIONS.map(([k, l]) => h('label', { class: 'check big' }, h('span', { text: l }), h('input', { type: 'checkbox', checked: P.sections[k] !== false, onchange: (e) => { P.sections[k] = e.target.checked; savePrefs(); } }))))),
+    h('div', { class: 'prefrow' }, h('span', { class: 'muted', text: 'Torna alle impostazioni di fabbrica dell\'aspetto.' }),
+      h('button', { class: 'btn small', type: 'button', onclick: () => { Object.assign(P, sanitizePrefs(null)); savePrefs(); applyPrefs(); S.dash.period = P.startPeriod; S.dash.anchor = null; repaintAppearance(); } }, 'Ripristina')));
+  card.id = 'card-aspetto';
+  return card;
+}
+
 function renderSettings() {
   const y = $('#view')?.firstElementChild?.scrollTop || 0;
   const view = $('#view');
@@ -239,7 +287,7 @@ function renderSettings() {
   } }, settingsDirty ? 'Salva modifiche' : 'Salvato');
   view.replaceChildren(h('div', { class: 'settings' },
     S.secure ? null : h('div', { class: 'banner warn', role: 'alert' }, 'Il portachiavi di sistema non è disponibile: le chiavi sono salvate in un file leggibile solo da te (permessi 600).'),
-    dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), updateCard(), advancedCard(),
+    appearanceCard(), dropboxCard(), notionCard(), modelsCard(), peopleCard(), storesCard(), updateCard(), advancedCard(),
     h('div', { class: 'savebar' }, save)));
   if (y) view.firstElementChild.scrollTop = y;
 }

@@ -180,3 +180,25 @@ test('aggiornamento: nessuna novità, firma errata, autorizzazione negata, repos
     await assert.rejects(() => x.up.update(), /controlla prima/);
   } finally { await x.t.mock.close(); }
 });
+
+test('statistiche: ripartizione per persona (spese condivise divise a metà, senza Tag = Non assegnato)', () => {
+  const { buildStats } = require('../src/core/stats');
+  const ex = [
+    { id: 1, date: '2026-11-03', store: 'A', amount: -100, people: ['Daniele'] },
+    { id: 2, date: '2026-11-04', store: 'B', amount: -60, people: ['Ettore'] },
+    { id: 3, date: '2026-11-05', store: 'C', amount: -20, people: ['Daniele', 'Ettore'] },
+    { id: 4, date: '2026-11-05', store: 'D', amount: -10, people: [] },
+    { id: 5, date: '2026-10-28', store: 'E', amount: -50, people: ['Ettore'] },
+  ];
+  const s = buildStats(ex, { period: 'week', today: '2026-11-07' });
+  const by = Object.fromEntries(s.byPerson.map((p) => [p.name, p]));
+  assert.equal(s.total, 190);
+  assert.equal(by.Daniele.total, 110);
+  assert.equal(by.Ettore.total, 70);
+  assert.equal(by['Non assegnato'].total, 10);
+  assert.equal(by.Ettore.prevTotal, 50);
+  assert.deepEqual(s.daily[3].byPerson, { Daniele: 10, Ettore: 10, 'Non assegnato': 10 });
+  assert.equal(s.byPerson.reduce((a, p) => a + p.total, 0), s.total);
+  const d = buildStats(ex, { period: 'week', today: '2026-11-07', person: 'Daniele' });
+  assert.equal(d.total, 110);
+});

@@ -39,7 +39,18 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   assert.match(await page.locator('.tab.active').innerText(), /Panoramica/);
   assert.equal(await page.locator('.kpi').count(), 4);
   assert.equal(await page.locator('.range').innerText(), '2 – 8 nov 2026');
-  assert.equal(await page.locator('.dcard.wide').first().locator('rect.cbar').count(), 7);
+  const dailySvg = page.locator('.dcard:has(h3:text-is("Spesa giornaliera")) svg.chart');
+  await dailySvg.waitFor();
+  assert.equal(await dailySvg.locator('text.lab:not(.sub)').count(), 7);
+  assert.ok(await dailySvg.locator('rect.seg-p').count() >= 4, 'grafico diviso per persona');
+  assert.equal(await page.locator('.pitem').count(), 2, 'una scheda per persona');
+  assert.match(await page.locator('.pdiff').innerText(), /ha speso .* in più di|identica/);
+  // schermo intero: il grafico si allarga insieme alla finestra
+  const w1 = await dailySvg.evaluate((e) => e.getBoundingClientRect().width);
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  await page.waitForFunction((w) => { const e = document.querySelector('.dcard svg.chart'); const b = e.parentElement.clientWidth; return Math.abs(e.getBoundingClientRect().width - b) < 2 && Math.abs(b - w) > 20; }, w1);
+  await shot(page, '0-dashboard-fullscreen');
+  await page.setViewportSize({ width: 1280, height: 860 });
   assert.ok(await page.locator('.blist-row').count() >= 2);
   assert.ok(await page.locator('.move').count() >= 1);
   const weekTotal = await page.locator('.kpi-v').first().innerText();
@@ -47,7 +58,8 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   await page.click('.seg-btn:has-text("Mese")');
   await page.waitForFunction(() => document.querySelector('.range').textContent === 'novembre 2026');
   assert.ok(await page.locator('polyline.line.cur').count() === 1, 'ritmo del mese');
-  assert.equal(await page.locator('.dcard.wide').first().locator('rect.cbar').count(), 30);
+  await page.waitForSelector('polyline.line.cur');
+  assert.ok(await page.locator('.dcard:has(h3:text-is("Spesa giornaliera")) text.lab:not(.sub)').count() >= 8);
   await shot(page, '0b-dashboard-month');
   await page.click('button[aria-label="Periodo precedente"]');
   await page.waitForFunction(() => document.querySelector('.range').textContent === 'ottobre 2026');
@@ -134,6 +146,21 @@ test('interfaccia: revisione, modifica, invio, storico, impostazioni', { skip: !
   // impostazioni: aggiunta modello, salvataggio, test modello
   await page.click('.tab:has-text("Impostazioni")');
   await page.waitForSelector('.settings');
+  // personalizzazione: tema scuro, sezione nascosta, ripristino
+  await page.click('#card-aspetto .seg-btn:has-text("Scuro")');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  await page.click('#card-aspetto .swatch[title="Arancio"]');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()), '#ff9f0a');
+  await page.click('#card-aspetto .seg-btn:has-text("Molto grande")');
+  await page.locator('#card-aspetto .checks label:has-text("Elenco movimenti")').click({ timeout: 3000 }).catch((e) => { throw new Error(e.message.slice(0, 600)); });
+  await shot(page, '5b-appearance');
+  await page.click('.tab:has-text("Panoramica")');
+  await page.waitForSelector('.dash .kpi');
+  assert.equal(await page.locator('.dcard:has(h3:has-text("Movimenti"))').count(), 0, 'sezione nascosta');
+  await shot(page, '5c-dashboard-custom');
+  await page.click('.tab:has-text("Impostazioni")');
+  await page.click('#card-aspetto button:has-text("Ripristina")');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme || 'auto'), 'auto');
   assert.equal(await page.locator('.mrow').count(), 2);
   await page.click('button:has-text("+ Aggiungi modello")');
   assert.equal(await page.locator('.mrow').count(), 3);

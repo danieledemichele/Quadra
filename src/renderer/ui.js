@@ -22,7 +22,7 @@ const S = {
   hist: { q: '', status: 'done' },
   zoom: false,
   update: { phase: 'idle' },
-  dash: { period: 'week', anchor: null, person: '', data: null, loading: false, refreshing: false, error: null },
+  dash: { period: P.startPeriod, anchor: null, person: '', data: null, loading: false, refreshing: false, error: null },
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
